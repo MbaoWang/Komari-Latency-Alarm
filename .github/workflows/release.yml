@@ -1,0 +1,63 @@
+# main 上 komari-plugin.json 的 version 還沒發布過時，自動執行測試、打包插件並建立 v<version> Release。
+# 發新版：修改 komari-plugin.json 的 version 後推到 main（發布說明可放在 .github/release-notes/v<version>.md）。
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - komari-plugin.json
+      - script.js
+      - .github/workflows/release.yml
+      - .github/release-notes/**
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run tests
+        run: node tests/test_plugin.js
+
+      - name: Read version
+        id: ver
+        run: echo "tag=v$(jq -r .version komari-plugin.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether this version is already released
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.ver.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "${{ steps.ver.outputs.tag }} 已發布，略過"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build plugin zip
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          zip -j komari-latency-alert.zip komari-plugin.json script.js README.md LICENSE
+
+      - name: Create release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          notes=".github/release-notes/${TAG}.md"
+          if [ -f "$notes" ]; then
+            gh release create "$TAG" komari-latency-alert.zip --target "$GITHUB_SHA" --title "$TAG" --notes-file "$notes"
+          else
+            gh release create "$TAG" komari-latency-alert.zip --target "$GITHUB_SHA" --title "$TAG" --generate-notes
+          fi
