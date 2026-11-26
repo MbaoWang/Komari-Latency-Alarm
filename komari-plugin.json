@@ -1,0 +1,49 @@
+{
+  "name": "延遲波動告警",
+  "short": "latency-alert",
+  "description": "偵測延遲監測任務的突發波動、緩慢爬升與持續高丟包（疑似阻斷），異常時自動推播通知。",
+  "author": "custom",
+  "version": "1.5.0",
+  "entry": "script.js",
+  "permissions": {
+    "node": true,
+    "allowSystemRPC": true,
+    "timeout": 30
+  },
+  "configuration": {
+    "type": "managed",
+    "data": [
+      { "key": "t_telegram", "name": "推播設定", "type": "title" },
+      { "key": "bot_token", "name": "Bot Token（選填）", "type": "string", "help": "Bot Token 與 Chat ID 都留空時，直接使用 Komari「通知」設定裡的機器人。要讓告警走另一個機器人或另一個聊天室時才需要填。" },
+      { "key": "chat_id", "name": "Chat ID（選填）", "type": "string", "help": "與 Bot Token 一起填才會生效；接收告警的使用者、群組或頻道 ID。" },
+      { "key": "thread_id", "name": "話題 ID（選填）", "type": "string", "help": "僅在自填 Bot Token 時有效。群組開啟話題（Topics）時填入 message_thread_id，否則留空。" },
+      { "key": "api_base", "name": "Telegram API 位址", "type": "string", "default": "https://api.telegram.org", "help": "僅在自填 Bot Token 時有效。伺服器無法直連 Telegram 時，可改填自架的反向代理位址。" },
+      { "key": "test_on_load", "name": "插件啟動時發送測試訊息", "type": "switch", "default": true, "help": "用來確認推播是否正常，確認後可關閉。" },
+
+      { "key": "t_detect", "name": "延遲偵測條件", "type": "title" },
+      { "key": "threshold_percent", "name": "波動幅度門檻（%）", "type": "number", "default": 50, "help": "波動後延遲與波動前基準相差超過此百分比才算波動。" },
+      { "key": "threshold_ms", "name": "波動絕對值門檻（ms）", "type": "number", "default": 30, "help": "同時還必須相差超過此毫秒數，避免低延遲線路 2ms→4ms 這類誤報。" },
+      { "key": "confirm_samples", "name": "連續確認筆數", "type": "number", "default": 3, "help": "最近連續幾筆延遲都超過門檻才告警，用來過濾單次尖峰。" },
+      { "key": "baseline_minutes", "name": "短期基準視窗（分鐘）", "type": "number", "default": 30, "help": "用波動發生前這段時間的有效延遲中位數算出「短期基準延遲」，用來抓突發波動並抵抗單次尖峰干擾。" },
+      { "key": "long_baseline_hours", "name": "長期基準視窗（小時）", "type": "number", "default": 24, "help": "每 30 分鐘計算一次長期中位數基準，用來偵測數小時內緩慢爬升的延遲變化；設為 0 關閉。" },
+      { "key": "direction", "name": "偵測方向", "type": "select", "options": "both,up", "default": "both", "help": "both：延遲上升或下降都告警；up：只在延遲上升時告警。" },
+
+      { "key": "t_loss", "name": "持續高丟包偵測（疑似被牆／阻斷）", "type": "title" },
+      { "key": "loss_minutes", "name": "持續高丟包時間（分鐘）", "type": "number", "default": 15, "help": "節點仍在線回報，但監測任務連續這段時間維持高丟包才告警（適合偵測被牆或路由阻斷）；設為 0 關閉。" },
+      { "key": "loss_percent", "name": "高丟包門檻（%）", "type": "number", "default": 80, "help": "持續時間視窗內的丟包率達到此百分比，且最近幾筆仍在丟包時才觸發告警。" },
+
+      { "key": "t_behavior", "name": "告警行為", "type": "title" },
+      { "key": "notify_recovery", "name": "恢復時通知", "type": "switch", "default": true, "help": "延遲或丟包回到正常水準（延遲含遲滯緩衝，避免臨界值反覆抖動）時再發一則恢復通知。" },
+      { "key": "rebase_minutes", "name": "重新定基準時間（分鐘）", "type": "number", "default": 60, "help": "延遲告警後超過此時間仍未恢復，視為線路已穩定在新延遲，改以新延遲作為基準。" },
+      { "key": "notify_rebase", "name": "重定基準時通知", "type": "switch", "default": true, "help": "超過重定基準時間仍未恢復、改以新延遲作為基準時發送通知。" },
+      { "key": "cooldown_minutes", "name": "告警冷卻時間（分鐘）", "type": "number", "default": 15, "help": "同一組「節點 × 任務」在恢復或重定基準後，這段時間內不再重複發送新的延遲波動告警；設為 0 關閉。" },
+
+      { "key": "t_scope", "name": "監控範圍", "type": "title" },
+      { "type": "textbox", "name": "<b>V4</b> 與 <b>V6</b> 各自選擇要監控的節點與監測任務，兩組互不影響。<br>・只要 V4 的節點放進「V4 節點」，只要 V6 的放進「V6 節點」，兩種都要的兩邊都選。<br>・監測任務不選時，自動套用名稱含「V4」（或「V6」）的任務。<br>・四個欄位全部留空＝監控所有節點的所有任務。" },
+      { "key": "nodes", "name": "V4 節點", "type": "nodes" },
+      { "key": "tasks", "name": "V4 監測任務", "type": "pingtasks" },
+      { "key": "nodes2", "name": "V6 節點", "type": "nodes" },
+      { "key": "tasks2", "name": "V6 監測任務", "type": "pingtasks" }
+    ]
+  }
+}
